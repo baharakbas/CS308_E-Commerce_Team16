@@ -6,12 +6,15 @@ import {
   updateBasketItem,
   removeBasketItem,
 } from "../lib/api";
+import { useNavigate } from "react-router-dom";
 
 const CART_STORAGE_KEY = "tidl_cart_id";
 
 export default function Cart({ onClose }) {
   // fallback so we don't crash if someone renders <Cart /> without onClose
   const safeOnClose = onClose || (() => {});
+
+  const navigate = useNavigate(); // <-- EKLENDİ
 
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -167,10 +170,10 @@ export default function Cart({ onClose }) {
       setErrorMsg("Your basket is empty.");
       return;
     }
-    // here you will navigate to /checkout from wherever you trigger payment,
-    // BUT since this component doesn't know the router in drawer-mode,
-    // we just close and let a "Checkout" button somewhere else handle routing.
+
+    // Sepet boş değilse: önce drawer'ı kapat, sonra checkout sayfasına git
     safeOnClose();
+    navigate("/checkout");
   };
 
   const handleClose = () => {
@@ -228,7 +231,6 @@ export default function Cart({ onClose }) {
                       const key = `${item.productId}-${item.sku}`;
                       const busy = savingKey === key;
 
-                      // 👇 NEW: use backend fields
                       const imageSrc =
                         item.mainImageUrl ||
                         (item.imageUrls && item.imageUrls[0]) ||
@@ -251,7 +253,6 @@ export default function Cart({ onClose }) {
                                   {item.name}
                                 </div>
                                 <div className="cart-drawer-item-meta">
-                                  {/* if you later add size/color labels, show them here */}
                                   {`SKU: ${item.sku}`}
                                 </div>
                               </div>

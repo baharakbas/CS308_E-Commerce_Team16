@@ -2,14 +2,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  checkout,
   getAccountDetails,
   getBasket,
   meRequest,
-  processPayment,
 } from "../lib/api";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
+
+const CART_STORAGE_KEY = "tidl_cart_id";
 
 const EMPTY_ADDRESS = {
   fullName: "",
@@ -22,11 +22,52 @@ const EMPTY_ADDRESS = {
   phoneNumber: "",
 };
 
+// Geçici / genel checkout API wrapper'ları
+// Backend'de farklı endpoint varsa sonra birlikte düzeltiriz.
+async function checkout(cartId, shipping, billing, paymentMethodKind) {
+  const res = await fetch("/api/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cartId,
+      shippingAddress: shipping,
+      billingAddress: billing,
+      paymentMethodKind: paymentMethodKind || "new",
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Checkout failed: ${res.status} ${text}`);
+  }
+
+  const data = await res.json();
+  return { data };
+}
+
+async function processPayment(orderId, paymentPayload) {
+  const res = await fetch(`/api/payments/${orderId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(paymentPayload),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Payment failed: ${res.status} ${text}`);
+  }
+
+  const data = await res.json();
+  return { data };
+}
+
 export default function Checkout() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
-  const [cartId, setCartId] = useState(() => localStorage.getItem("cartId"));
+  const [cartId, setCartId] = useState(() =>
+    localStorage.getItem(CART_STORAGE_KEY) || null
+  );
   const [basket, setBasket] = useState({ items: [], subtotal: 0 });
   const [shipping, setShipping] = useState(EMPTY_ADDRESS);
   const [billing, setBilling] = useState(EMPTY_ADDRESS);
@@ -45,11 +86,18 @@ export default function Checkout() {
         const userRes = await meRequest();
         setUser(userRes.data);
 
-        const basketRes = await getBasket(userRes.data.id, cartId);
+        const storedCartId =
+          cartId || localStorage.getItem(CART_STORAGE_KEY) || undefined;
+
+        const basketRes = await getBasket({
+          userId: userRes.data.id,
+          cartId: storedCartId,
+        });
+
         setBasket(basketRes.data);
 
         if (basketRes.data.orderId) {
-          localStorage.setItem("cartId", basketRes.data.orderId);
+          localStorage.setItem(CART_STORAGE_KEY, basketRes.data.orderId);
           setCartId(basketRes.data.orderId);
         }
 
@@ -81,7 +129,10 @@ export default function Checkout() {
   }, [shipping, useSameAddress]);
 
   const totals = useMemo(() => {
-    const subtotal = basket.items.reduce((sum, item) => sum + (parseFloat(item.lineTotal) || 0), 0);
+    const subtotal = basket.items.reduce(
+      (sum, item) => sum + (parseFloat(item.lineTotal) || 0),
+      0
+    );
     return {
       subtotal,
       shipping: 0,
@@ -106,9 +157,13 @@ export default function Checkout() {
     setProcessing(true);
     try {
       const checkoutRes = await checkout(cartId, shipping, billing, "new");
-      const orderId = checkoutRes.data.orderId || checkoutRes.data.order?.id;
-      await processPayment(orderId, { ...paymentDetails, paymentMethodId: "new" });
-      localStorage.removeItem("cartId");
+      const orderId =
+        checkoutRes.data.orderId || checkoutRes.data.order?.id;
+      await processPayment(orderId, {
+        ...paymentDetails,
+        paymentMethodId: "new",
+      });
+      localStorage.removeItem(CART_STORAGE_KEY);
       navigate(`/invoice/${orderId}`);
     } catch (err) {
       console.error("Payment failed:", err);
@@ -121,7 +176,9 @@ export default function Checkout() {
   if (loading) {
     return (
       <div className="home-page">
-        <div style={{ padding: "2rem", textAlign: "center" }}>Loading checkout...</div>
+        <div style={{ padding: "2rem", textAlign: "center" }}>
+          Loading checkout...
+        </div>
       </div>
     );
   }
@@ -135,25 +192,62 @@ export default function Checkout() {
           </span>
         </div>
         <nav className="home-nav">
-          <button className="home-nav-item" onClick={() => navigate("/category/sweatshirts")}>
+          <button
+            className="home-nav-item"
+            onClick={() => navigate("/category/sweatshirts")}
+          >
             SWEATSHIRTS
           </button>
         </nav>
         <div className="home-right">
-          <img src={searchIcon} alt="search" className="home-icon" onClick={() => navigate("/search")} />
+          <img
+            src={searchIcon}
+            alt="search"
+            className="home-icon"
+            onClick={() => navigate("/search")}
+          />
           {user && (
-            <span className="login-topbar-link" style={{ cursor: "default" }}>
+            <span
+              className="login-topbar-link"
+              style={{ cursor: "default" }}
+            >
               {`HEY! ${user.name}`}
             </span>
           )}
-          <img src={bagIcon} alt="bag" className="home-icon" onClick={() => navigate("/cart")} />
+          <img
+            src={bagIcon}
+            alt="bag"
+            className="home-icon"
+            onClick={() => navigate("/cart")}
+          />
         </div>
       </header>
 
-      <main style={{ maxWidth: "1100px", margin: "0 auto", padding: "2rem", paddingTop: "6rem" }}>
-        <h1 style={{ fontSize: "2rem", fontWeight: "600", marginBottom: "1rem" }}>CHECKOUT</h1>
+      <main
+        style={{
+          maxWidth: "1100px",
+          margin: "0 auto",
+          padding: "2rem",
+          paddingTop: "6rem",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: "2rem",
+            fontWeight: "600",
+            marginBottom: "1rem",
+          }}
+        >
+          CHECKOUT
+        </h1>
         <form onSubmit={handleSubmit}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: "2rem" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 360px",
+              gap: "2rem",
+            }}
+          >
             <div>
               <section style={{ marginBottom: "2rem" }}>
                 <h2>Shipping Address</h2>
@@ -161,21 +255,36 @@ export default function Checkout() {
                   <input
                     placeholder="Full Name *"
                     value={shipping.fullName}
-                    onChange={(e) => handleAddressChange(setShipping)("fullName", e.target.value)}
+                    onChange={(e) =>
+                      handleAddressChange(setShipping)(
+                        "fullName",
+                        e.target.value
+                      )
+                    }
                     required
                     style={{ padding: "0.75rem" }}
                   />
                   <input
                     placeholder="Address Line 1 *"
                     value={shipping.line1}
-                    onChange={(e) => handleAddressChange(setShipping)("line1", e.target.value)}
+                    onChange={(e) =>
+                      handleAddressChange(setShipping)(
+                        "line1",
+                        e.target.value
+                      )
+                    }
                     required
                     style={{ padding: "0.75rem" }}
                   />
                   <input
                     placeholder="City *"
                     value={shipping.city}
-                    onChange={(e) => handleAddressChange(setShipping)("city", e.target.value)}
+                    onChange={(e) =>
+                      handleAddressChange(setShipping)(
+                        "city",
+                        e.target.value
+                      )
+                    }
                     required
                     style={{ padding: "0.75rem" }}
                   />
@@ -183,14 +292,24 @@ export default function Checkout() {
                     <input
                       placeholder="State *"
                       value={shipping.state}
-                      onChange={(e) => handleAddressChange(setShipping)("state", e.target.value)}
+                      onChange={(e) =>
+                        handleAddressChange(setShipping)(
+                          "state",
+                          e.target.value
+                        )
+                      }
                       required
                       style={{ padding: "0.75rem", flex: 1 }}
                     />
                     <input
                       placeholder="ZIP Code *"
                       value={shipping.zipCode}
-                      onChange={(e) => handleAddressChange(setShipping)("zipCode", e.target.value)}
+                      onChange={(e) =>
+                        handleAddressChange(setShipping)(
+                          "zipCode",
+                          e.target.value
+                        )
+                      }
                       required
                       style={{ padding: "0.75rem", flex: 1 }}
                     />
@@ -198,61 +317,104 @@ export default function Checkout() {
                   <input
                     placeholder="Country *"
                     value={shipping.country}
-                    onChange={(e) => handleAddressChange(setShipping)("country", e.target.value)}
+                    onChange={(e) =>
+                      handleAddressChange(setShipping)(
+                        "country",
+                        e.target.value
+                      )
+                    }
                     required
                     style={{ padding: "0.75rem" }}
                   />
                   <input
                     placeholder="Phone Number *"
                     value={shipping.phoneNumber}
-                    onChange={(e) => handleAddressChange(setShipping)("phoneNumber", e.target.value)}
+                    onChange={(e) =>
+                      handleAddressChange(setShipping)(
+                        "phoneNumber",
+                        e.target.value
+                      )
+                    }
                     required
                     style={{ padding: "0.75rem" }}
                   />
                 </div>
               </section>
+
               <section style={{ marginBottom: "2rem" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={useSameAddress}
-                    onChange={(e) => setUseSameAddress(e.target.checked)}
+                    onChange={(e) =>
+                      setUseSameAddress(e.target.checked)
+                    }
                   />
                   Billing address same as shipping
                 </label>
                 {!useSameAddress && (
-                  <div style={{ display: "grid", gap: "1rem", marginTop: "1rem" }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "1rem",
+                      marginTop: "1rem",
+                    }}
+                  >
                     <input
                       placeholder="Billing Full Name *"
                       value={billing.fullName}
-                      onChange={(e) => handleAddressChange(setBilling)("fullName", e.target.value)}
+                      onChange={(e) =>
+                        handleAddressChange(setBilling)(
+                          "fullName",
+                          e.target.value
+                        )
+                      }
                       required
                       style={{ padding: "0.75rem" }}
                     />
                     <input
                       placeholder="Billing Address *"
                       value={billing.line1}
-                      onChange={(e) => handleAddressChange(setBilling)("line1", e.target.value)}
+                      onChange={(e) =>
+                        handleAddressChange(setBilling)(
+                          "line1",
+                          e.target.value
+                        )
+                      }
                       required
                       style={{ padding: "0.75rem" }}
                     />
                     <input
                       placeholder="Billing City *"
                       value={billing.city}
-                      onChange={(e) => handleAddressChange(setBilling)("city", e.target.value)}
+                      onChange={(e) =>
+                        handleAddressChange(setBilling)(
+                          "city",
+                          e.target.value
+                        )
+                      }
                       required
                       style={{ padding: "0.75rem" }}
                     />
                   </div>
                 )}
               </section>
+
               <section>
                 <h2>Payment</h2>
                 <div style={{ display: "grid", gap: "1rem" }}>
                   <input
                     placeholder="Card Number *"
                     value={paymentDetails.cardNumber}
-                    onChange={(e) => handlePaymentChange("cardNumber", e.target.value)}
+                    onChange={(e) =>
+                      handlePaymentChange("cardNumber", e.target.value)
+                    }
                     required
                     style={{ padding: "0.75rem" }}
                   />
@@ -260,14 +422,21 @@ export default function Checkout() {
                     <input
                       placeholder="Expiry (MM/YY) *"
                       value={paymentDetails.expiryDate}
-                      onChange={(e) => handlePaymentChange("expiryDate", e.target.value)}
+                      onChange={(e) =>
+                        handlePaymentChange(
+                          "expiryDate",
+                          e.target.value
+                        )
+                      }
                       required
                       style={{ padding: "0.75rem", flex: 1 }}
                     />
                     <input
                       placeholder="CVV *"
                       value={paymentDetails.cvv}
-                      onChange={(e) => handlePaymentChange("cvv", e.target.value)}
+                      onChange={(e) =>
+                        handlePaymentChange("cvv", e.target.value)
+                      }
                       required
                       style={{ padding: "0.75rem", flex: 1 }}
                     />
@@ -275,35 +444,76 @@ export default function Checkout() {
                   <input
                     placeholder="Cardholder Name *"
                     value={paymentDetails.holderName}
-                    onChange={(e) => handlePaymentChange("holderName", e.target.value)}
+                    onChange={(e) =>
+                      handlePaymentChange(
+                        "holderName",
+                        e.target.value
+                      )
+                    }
                     required
                     style={{ padding: "0.75rem" }}
                   />
                 </div>
               </section>
             </div>
+
             <div>
-              <div style={{ border: "1px solid #e5e5e5", padding: "2rem", background: "#fff" }}>
+              <div
+                style={{
+                  border: "1px solid #e5e5e5",
+                  padding: "2rem",
+                  background: "#fff",
+                }}
+              >
                 <h2>Order Summary</h2>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.75rem",
+                    marginBottom: "1rem",
+                  }}
+                >
                   {basket.items.map((item) => (
                     <div
                       key={`${item.productId}-${item.sku}`}
-                      style={{ display: "flex", justifyContent: "space-between" }}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                      }}
                     >
                       <span>
                         {item.name} x {item.quantity}
                       </span>
-                      <span>${parseFloat(item.lineTotal || 0).toFixed(2)}</span>
+                      <span>
+                        ${parseFloat(item.lineTotal || 0).toFixed(2)}
+                      </span>
                     </div>
                   ))}
                 </div>
-                <div style={{ borderTop: "1px solid #e5e5e5", paddingTop: "1rem", marginBottom: "1rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+
+                <div
+                  style={{
+                    borderTop: "1px solid #e5e5e5",
+                    paddingTop: "1rem",
+                    marginBottom: "1rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                    }}
+                  >
                     <span>Subtotal</span>
                     <span>${totals.subtotal.toFixed(2)}</span>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                    }}
+                  >
                     <span>Shipping</span>
                     <span>${totals.shipping.toFixed(2)}</span>
                   </div>
@@ -319,6 +529,7 @@ export default function Checkout() {
                     <span>${totals.grandTotal.toFixed(2)}</span>
                   </div>
                 </div>
+
                 <button
                   type="submit"
                   disabled={processing}
@@ -342,4 +553,3 @@ export default function Checkout() {
     </div>
   );
 }
-
