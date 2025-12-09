@@ -24,13 +24,16 @@ public class CheckoutService {
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
+    private final InvoiceService invoiceService;
 
     public CheckoutService(UserRepository userRepository,
                            OrderRepository orderRepository,
-                           ProductRepository productRepository) {
+                           ProductRepository productRepository,
+                           InvoiceService invoiceService) {
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
+        this.invoiceService = invoiceService;
     }
 
     @Transactional
@@ -106,7 +109,10 @@ public class CheckoutService {
 
         OrderEntity saved = orderRepository.save(cart);
 
-        // 10) Sipariş detayını döndür
+        // 11) Invoice & email
+        invoiceService.generateAndSendInvoice(saved);
+
+        // 12) Sipariş detayını döndür
         return OrderMapper.toDetail(saved);
     }
 
