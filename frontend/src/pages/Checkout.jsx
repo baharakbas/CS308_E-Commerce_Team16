@@ -1,15 +1,12 @@
 // src/pages/Checkout.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  getAccountDetails,
-  getBasket,
-  meRequest,
-} from "../lib/api";
+import { getAccountDetails, getBasket, meRequest } from "../lib/api";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
 
 const CART_STORAGE_KEY = "tidl_cart_id";
+const API_BASE = "http://localhost:8080";
 
 const EMPTY_ADDRESS = {
   fullName: "",
@@ -22,12 +19,12 @@ const EMPTY_ADDRESS = {
   phoneNumber: "",
 };
 
-// Geçici / genel checkout API wrapper'ları
-// Backend'de farklı endpoint varsa sonra birlikte düzeltiriz.
+// Sadece backend'deki /api/orders/checkout endpoint'ini çağırıyoruz
 async function checkout(cartId, shipping, billing, paymentMethodKind) {
-  const res = await fetch("/api/checkout", {
+  const res = await fetch(`${API_BASE}/api/orders/checkout`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include", // login cookie'si gitsin
     body: JSON.stringify({
       cartId,
       shippingAddress: shipping,
@@ -39,22 +36,6 @@ async function checkout(cartId, shipping, billing, paymentMethodKind) {
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Checkout failed: ${res.status} ${text}`);
-  }
-
-  const data = await res.json();
-  return { data };
-}
-
-async function processPayment(orderId, paymentPayload) {
-  const res = await fetch(`/api/payments/${orderId}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(paymentPayload),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Payment failed: ${res.status} ${text}`);
   }
 
   const data = await res.json();
@@ -150,19 +131,27 @@ export default function Checkout() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
     if (!basket.items.length) {
       alert("Cart is empty.");
       return;
     }
+
     setProcessing(true);
     try {
       const checkoutRes = await checkout(cartId, shipping, billing, "new");
+      console.log("Checkout response:", checkoutRes.data);
+
+      // Backend'den dönen yapıya göre olası id alanlarını dene
       const orderId =
-        checkoutRes.data.orderId || checkoutRes.data.order?.id;
-      await processPayment(orderId, {
-        ...paymentDetails,
-        paymentMethodId: "new",
-      });
+        checkoutRes.data.orderId ||
+        checkoutRes.data.id ||
+        checkoutRes.data.order?.id;
+
+      if (!orderId) {
+        throw new Error("Order ID not found in checkout response");
+      }
+
       localStorage.removeItem(CART_STORAGE_KEY);
       navigate(`/invoice/${orderId}`);
     } catch (err) {
@@ -352,9 +341,7 @@ export default function Checkout() {
                   <input
                     type="checkbox"
                     checked={useSameAddress}
-                    onChange={(e) =>
-                      setUseSameAddress(e.target.checked)
-                    }
+                    onChange={(e) => setUseSameAddress(e.target.checked)}
                   />
                   Billing address same as shipping
                 </label>
@@ -423,10 +410,7 @@ export default function Checkout() {
                       placeholder="Expiry (MM/YY) *"
                       value={paymentDetails.expiryDate}
                       onChange={(e) =>
-                        handlePaymentChange(
-                          "expiryDate",
-                          e.target.value
-                        )
+                        handlePaymentChange("expiryDate", e.target.value)
                       }
                       required
                       style={{ padding: "0.75rem", flex: 1 }}
@@ -445,10 +429,7 @@ export default function Checkout() {
                     placeholder="Cardholder Name *"
                     value={paymentDetails.holderName}
                     onChange={(e) =>
-                      handlePaymentChange(
-                        "holderName",
-                        e.target.value
-                      )
+                      handlePaymentChange("holderName", e.target.value)
                     }
                     required
                     style={{ padding: "0.75rem" }}

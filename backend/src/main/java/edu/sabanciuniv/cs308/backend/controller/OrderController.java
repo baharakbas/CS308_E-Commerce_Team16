@@ -74,4 +74,32 @@ public class OrderController {
         OrderDetailDTO dto = OrderMapper.toDetail(order);
         return ResponseEntity.ok(dto);
     }
+
+    // POST /api/orders/checkout
+    // Şimdilik basit bir "fake" checkout endpoint'i:
+    // - Kullanıcı login mi kontrol ediyor
+    // - Kullanıcıyı buluyor
+    // - Frontend'in beklediği formatta bir orderId döndürüyor
+    @PostMapping("/checkout")
+    public ResponseEntity<?> checkout(Authentication auth,
+                                      @RequestBody Map<String, Object> body) {
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+
+        String email = auth.getName();
+        UserEntity user = userRepository.findByEmailAddress(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Şimdilik gerçek order oluşturmak yerine,
+        // frontend'i ilerletmek için temp bir order id üretiyoruz.
+        // İstersen sonra burayı gerçek basket -> order akışıyla bağlarız.
+        String generatedOrderId = "TEMP-" + System.currentTimeMillis();
+
+        return ResponseEntity.ok(Map.of(
+                "orderId", generatedOrderId,
+                "userId", user.getId(),
+                "message", "Checkout successfully"
+        ));
+    }
 }
