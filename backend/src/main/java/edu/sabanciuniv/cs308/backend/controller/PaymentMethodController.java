@@ -1,4 +1,4 @@
-/* package edu.sabanciuniv.cs308.backend.controller;
+package edu.sabanciuniv.cs308.backend.controller;
 
 import edu.sabanciuniv.cs308.backend.entity.PaymentMethod;
 import edu.sabanciuniv.cs308.backend.entity.UserEntity;
@@ -41,10 +41,12 @@ public class PaymentMethodController {
         pm.setHolderName(req.getHolderName());
         pm.setToken(req.getToken());
         pm.setNickname(req.getNickname());
-        pm.setIsDefault(req.isDefault());
+        pm.setDefault(req.isDefault());
 
         if (req.isDefault()) {
-            for (PaymentMethod x : u.getPaymentMethods()) x.setIsDefault(false);
+            for (PaymentMethod x : u.getPaymentMethods()) {
+                x.setDefault(false);
+            }
         }
         u.getPaymentMethods().add(pm);
         userRepo.save(u);
@@ -66,8 +68,10 @@ public class PaymentMethodController {
         if (req.getExpYear() != null) pm.setExpYear(req.getExpYear());
         if (req.getNickname() != null) pm.setNickname(req.getNickname());
         if (req.getIsDefault() != null && req.getIsDefault()) {
-            for (PaymentMethod x : u.getPaymentMethods()) x.setIsDefault(false);
-            pm.setIsDefault(true);
+            for (PaymentMethod x : u.getPaymentMethods()) {
+                x.setDefault(false);
+            }
+            pm.setDefault(true);
         }
 
         userRepo.save(u);
@@ -90,4 +94,4 @@ public class PaymentMethodController {
         return userRepo.findByEmailAddress(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
-} */
+}
