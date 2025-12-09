@@ -13,6 +13,7 @@ import Pants from "./pages/category/pants";
 import ProductDetailMock from "./pages/ProductDetailMock";
 import ProductDetail from "./pages/ProductDetail";
 import Checkout from "./pages/Checkout";
+import Invoice from "./pages/Invoice";
 
 import { CartDrawerProvider } from "./context/CartDrawerContext.jsx";
 import "./index.css";
@@ -61,6 +62,13 @@ export default function App() {
               </RequireAuth>
             }
           />
+
+          {/* 🔥 YENİ: Invoice route’u */}
+          <Route path="/invoice/:orderId" element={<Invoice />} />
+
+         
+
+          <Route path="/invoice/:orderId" element={<Invoice />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/home" replace />} />

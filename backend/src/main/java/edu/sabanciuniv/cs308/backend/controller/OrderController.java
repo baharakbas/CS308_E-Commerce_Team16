@@ -1,5 +1,7 @@
 package edu.sabanciuniv.cs308.backend.controller;
 
+import edu.sabanciuniv.cs308.backend.dto.InvoiceDTO;
+import edu.sabanciuniv.cs308.backend.service.InvoiceService;
 import edu.sabanciuniv.cs308.backend.dto.OrderDetailDTO;
 import edu.sabanciuniv.cs308.backend.entity.OrderEntity;
 import edu.sabanciuniv.cs308.backend.entity.UserEntity;
@@ -12,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+
+
 import java.util.Map;
 
 @RestController
@@ -20,11 +24,15 @@ public class OrderController {
 
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
+    private final InvoiceService invoiceService;
+
 
     public OrderController(OrderRepository orderRepository,
-                           UserRepository userRepository) {
+                           UserRepository userRepository,
+                           InvoiceService invoiceService) {
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
+        this.invoiceService = invoiceService;
     }
 
     // GET /api/orders?me=true&page=0&size=10
@@ -75,11 +83,7 @@ public class OrderController {
         return ResponseEntity.ok(dto);
     }
 
-    // POST /api/orders/checkout
-    // Şimdilik basit bir "fake" checkout endpoint'i:
-    // - Kullanıcı login mi kontrol ediyor
-    // - Kullanıcıyı buluyor
-    // - Frontend'in beklediği formatta bir orderId döndürüyor
+        // POST /api/orders/checkout
     @PostMapping("/checkout")
     public ResponseEntity<?> checkout(Authentication auth,
                                       @RequestBody Map<String, Object> body) {
@@ -91,10 +95,24 @@ public class OrderController {
         UserEntity user = userRepository.findByEmailAddress(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Şimdilik gerçek order oluşturmak yerine,
-        // frontend'i ilerletmek için temp bir order id üretiyoruz.
-        // İstersen sonra burayı gerçek basket -> order akışıyla bağlarız.
+        // Frontend’in beklediği temp order id
         String generatedOrderId = "TEMP-" + System.currentTimeMillis();
+
+        // 🔥 1) Body içinden cartId al
+        Object cartIdObj = body.get("cartId");
+        if (cartIdObj instanceof String cartId && !cartId.isBlank()) {
+            // Bu cart aslında OrderEntity (status=CART) olarak tutuluyor.
+            orderRepository.findById(cartId).ifPresent(cartOrder -> {
+                // 🔥 2) Cart’tan invoice datasını üret
+                InvoiceDTO invoice = invoiceService.buildInvoiceFromOrder(
+                        generatedOrderId,
+                        user,
+                        cartOrder
+                );
+                // 🔥 3) “Mail gönderimi”ni tetikle (şimdilik simülasyon)
+                invoiceService.sendInvoiceEmail(invoice);
+            });
+        }
 
         return ResponseEntity.ok(Map.of(
                 "orderId", generatedOrderId,
@@ -102,4 +120,5 @@ public class OrderController {
                 "message", "Checkout successfully"
         ));
     }
+
 }

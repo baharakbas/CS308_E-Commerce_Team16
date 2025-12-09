@@ -21,6 +21,13 @@ const EMPTY_ADDRESS = {
 
 // Sadece backend'deki /api/orders/checkout endpoint'ini çağırıyoruz
 async function checkout(cartId, shipping, billing, paymentMethodKind) {
+  console.log(">>> Calling /api/orders/checkout with:", {
+    cartId,
+    shipping,
+    billing,
+    paymentMethodKind,
+  });
+
   const res = await fetch(`${API_BASE}/api/orders/checkout`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -35,10 +42,12 @@ async function checkout(cartId, shipping, billing, paymentMethodKind) {
 
   if (!res.ok) {
     const text = await res.text();
+    console.error("Checkout failed raw response:", text);
     throw new Error(`Checkout failed: ${res.status} ${text}`);
   }
 
   const data = await res.json();
+  console.log(">>> /api/orders/checkout response JSON:", data);
   return { data };
 }
 
@@ -64,17 +73,22 @@ export default function Checkout() {
   useEffect(() => {
     const load = async () => {
       try {
+        console.log(">>> Initializing checkout page...");
         const userRes = await meRequest();
         setUser(userRes.data);
+        console.log("meRequest data:", userRes.data);
 
         const storedCartId =
           cartId || localStorage.getItem(CART_STORAGE_KEY) || undefined;
+
+        console.log("Using cartId:", storedCartId);
 
         const basketRes = await getBasket({
           userId: userRes.data.id,
           cartId: storedCartId,
         });
 
+        console.log("getBasket response:", basketRes.data);
         setBasket(basketRes.data);
 
         if (basketRes.data.orderId) {
@@ -83,6 +97,8 @@ export default function Checkout() {
         }
 
         const accountRes = await getAccountDetails();
+        console.log("getAccountDetails response:", accountRes.data);
+
         setShipping((prev) => ({
           ...prev,
           fullName: userRes.data.name || prev.fullName,
@@ -121,9 +137,11 @@ export default function Checkout() {
     };
   }, [basket]);
 
-  const handleAddressChange = (setter) => (field, value) => {
-    setter((prev) => ({ ...prev, [field]: value }));
-  };
+  const handleAddressChange =
+    (setter) =>
+    (field, value) => {
+      setter((prev) => ({ ...prev, [field]: value }));
+    };
 
   const handlePaymentChange = (field, value) => {
     setPaymentDetails((prev) => ({ ...prev, [field]: value }));
@@ -132,35 +150,53 @@ export default function Checkout() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!basket.items.length) {
+    console.log(">>> CONFIRM PAYMENT clicked");
+
+    if (!basket?.items?.length) {
       alert("Cart is empty.");
       return;
     }
 
     setProcessing(true);
     try {
+      // Mevcut helper'ı kullanıyoruz
       const checkoutRes = await checkout(cartId, shipping, billing, "new");
-      console.log("Checkout response:", checkoutRes.data);
+      console.log("Checkout response (raw):", checkoutRes);
 
-      // Backend'den dönen yapıya göre olası id alanlarını dene
-      const orderId =
-        checkoutRes.data.orderId ||
-        checkoutRes.data.id ||
-        checkoutRes.data.order?.id;
+      // Bazı axios/fetch farkları için hem .data hem direkt objeyi düşün
+     const data = checkoutRes?.data || checkoutRes;
+     console.log("Checkout response (data):", data);
 
-      if (!orderId) {
-        throw new Error("Order ID not found in checkout response");
-      }
+      // Backend'den gelebilecek olası id alanlarını sırayla dene
+      const orderIdFromBackend =
+        data.orderId ||
+        data.id ||
+       data.order?.id ||
+       data.externalOrderId;
 
+      // Eğer backend hiç id vermezse TEMP üret
+      const orderIdForInvoice =
+       orderIdFromBackend && orderIdFromBackend !== ""
+          ? orderIdFromBackend
+          : `TEMP-${Date.now()}`;
+
+     console.log("Derived orderId for invoice route:", orderIdForInvoice);
+
+     // Sepeti temizle
       localStorage.removeItem(CART_STORAGE_KEY);
-      navigate(`/invoice/${orderId}`);
+
+     // Invoice sayfasına git
+     navigate(`/invoice/${orderIdForInvoice}`);
     } catch (err) {
-      console.error("Payment failed:", err);
-      alert("Payment failed. Please check your details.");
+     console.error("Payment failed:", err);
+     alert("Payment failed. Please check your details.");
     } finally {
       setProcessing(false);
     }
   };
+
+
+  
 
   if (loading) {
     return (
@@ -196,10 +232,7 @@ export default function Checkout() {
             onClick={() => navigate("/search")}
           />
           {user && (
-            <span
-              className="login-topbar-link"
-              style={{ cursor: "default" }}
-            >
+            <span className="login-topbar-link" style={{ cursor: "default" }}>
               {`HEY! ${user.name}`}
             </span>
           )}

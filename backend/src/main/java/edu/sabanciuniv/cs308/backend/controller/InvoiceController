@@ -1,0 +1,60 @@
+package edu.sabanciuniv.cs308.backend.controller;
+
+import edu.sabanciuniv.cs308.backend.dto.InvoiceDTO;
+import edu.sabanciuniv.cs308.backend.entity.OrderEntity;
+import edu.sabanciuniv.cs308.backend.entity.UserEntity;
+import edu.sabanciuniv.cs308.backend.repository.OrderRepository;
+import edu.sabanciuniv.cs308.backend.repository.UserRepository;
+import edu.sabanciuniv.cs308.backend.service.InvoiceService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/invoices")
+public class InvoiceController {
+
+    private final OrderRepository orderRepository;
+    private final UserRepository userRepository;
+    private final InvoiceService invoiceService;
+
+    public InvoiceController(OrderRepository orderRepository,
+                             UserRepository userRepository,
+                             InvoiceService invoiceService) {
+        this.orderRepository = orderRepository;
+        this.userRepository = userRepository;
+        this.invoiceService = invoiceService;
+    }
+
+    // GET /api/invoices/{orderId}
+    @GetMapping("/{orderId}")
+    public ResponseEntity<?> getInvoice(@PathVariable String orderId) {
+
+        // 1) Order'ı bul
+        Optional<OrderEntity> orderOpt = orderRepository.findById(orderId);
+        if (orderOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        OrderEntity order = orderOpt.get();
+
+        // 2) User'ı bul (order.userId üzerinden)
+        if (order.getUserId() == null) {
+            return ResponseEntity.internalServerError()
+                    .body("Order has no userId");
+        }
+
+        Optional<UserEntity> userOpt = userRepository.findById(order.getUserId());
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.internalServerError()
+                    .body("User not found for this order");
+        }
+        UserEntity user = userOpt.get();
+
+        // 3) InvoiceDTO üret
+        InvoiceDTO invoice = invoiceService.buildInvoiceFromOrder(orderId, user, order);
+
+        // 4) JSON olarak dön
+        return ResponseEntity.ok(invoice);
+    }
+}
