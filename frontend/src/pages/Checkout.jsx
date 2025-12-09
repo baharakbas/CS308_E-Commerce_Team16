@@ -2,11 +2,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  
+  checkout,
   getAccountDetails,
   getBasket,
   meRequest,
-  
 } from "../lib/api";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
@@ -45,7 +44,7 @@ export default function Checkout() {
         const userRes = await meRequest();
         setUser(userRes.data);
 
-        const basketRes = await getBasket(userRes.data.id, cartId);
+        const basketRes = await getBasket({ userId: userRes.data.id, cartId });
         setBasket(basketRes.data);
 
         if (basketRes.data.orderId) {
@@ -97,6 +96,55 @@ export default function Checkout() {
     setPaymentDetails((prev) => ({ ...prev, [field]: value }));
   };
 
+  const detectCardBrand = (cardNumber = "") => {
+    const digits = cardNumber.replace(/\s+/g, "");
+    if (digits.startsWith("4")) return "VISA";
+    if (/^5[1-5]/.test(digits)) return "MASTERCARD";
+    if (digits.startsWith("3")) return "AMEX";
+    return "CARD";
+  };
+
+  const parseExpiry = (value = "") => {
+    const parts = value.split(/[\/\-]/);
+    const month = parseInt(parts[0], 10) || 1;
+    let year = parseInt(parts[1], 10) || new Date().getFullYear();
+    if (year < 100) {
+      const currentCentury = Math.floor(new Date().getFullYear() / 100) * 100;
+      year = currentCentury + year;
+    }
+    return { month, year };
+  };
+
+  const buildCheckoutPayload = () => {
+    const trimmedCard = paymentDetails.cardNumber.replace(/\s+/g, "");
+    const { month, year } = parseExpiry(paymentDetails.expiryDate);
+    return {
+      cartId,
+      shippingFullName: shipping.fullName,
+      shippingLine1: shipping.line1,
+      shippingLine2: shipping.line2,
+      shippingCity: shipping.city,
+      shippingState: shipping.state,
+      shippingCountry: shipping.country,
+      shippingZipCode: shipping.zipCode,
+      shippingPhoneNumber: shipping.phoneNumber,
+      useShippingAsBilling: useSameAddress,
+      billingFullName: billing.fullName,
+      billingLine1: billing.line1,
+      billingLine2: billing.line2,
+      billingCity: billing.city,
+      billingState: billing.state,
+      billingCountry: billing.country,
+      billingZipCode: billing.zipCode,
+      billingPhoneNumber: billing.phoneNumber,
+      cardHolderName: paymentDetails.holderName,
+      cardBrand: detectCardBrand(trimmedCard),
+      cardLast4: trimmedCard.slice(-4),
+      cardExpMonth: month,
+      cardExpYear: year,
+    };
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!basket.items.length) {
@@ -105,14 +153,19 @@ export default function Checkout() {
     }
     setProcessing(true);
     try {
-      const checkoutRes = await checkout(cartId, shipping, billing, "new");
-      const orderId = checkoutRes.data.orderId || checkoutRes.data.order?.id;
-      await processPayment(orderId, { ...paymentDetails, paymentMethodId: "new" });
+      const payload = buildCheckoutPayload();
+      const checkoutRes = await checkout(payload);
+      const orderId = checkoutRes.data.id || checkoutRes.data.orderId;
+      if (!orderId) {
+        throw new Error("Order ID missing from response");
+      }
       localStorage.removeItem("cartId");
+      setCartId(null);
       navigate(`/invoice/${orderId}`);
     } catch (err) {
-      console.error("Payment failed:", err);
-      alert("Payment failed. Please check your details.");
+      console.error("Checkout failed:", err);
+      const message = err.response?.data?.message || "Payment failed. Please check your details.";
+      alert(message);
     } finally {
       setProcessing(false);
     }

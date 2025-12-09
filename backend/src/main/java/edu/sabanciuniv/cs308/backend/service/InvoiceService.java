@@ -37,16 +37,11 @@ public class InvoiceService {
     private final EmailService emailService;
 
     public void generateAndSendInvoice(OrderEntity order) {
-        if (order == null) {
-            throw new IllegalArgumentException("order must not be null");
-        }
-        if (order.getUserId() == null) {
-            log.warn("Order {} has no userId. Skipping invoice generation.", order.getId());
+        UserEntity user = resolveUserOrNull(order);
+        if (user == null) {
+            log.warn("Order {} has no associated user. Skipping invoice email.", order != null ? order.getId() : "N/A");
             return;
         }
-
-        UserEntity user = userRepository.findById(order.getUserId())
-                .orElseThrow(() -> new IllegalStateException("User not found for invoice generation"));
 
         byte[] pdfBytes = createInvoicePdf(order, user);
         String subject = "Your TIDL invoice #" + order.getId();
@@ -67,6 +62,22 @@ public class InvoiceService {
                 pdfBytes,
                 "invoice-" + order.getId() + ".pdf"
         );
+    }
+
+    /**
+     * Builds the invoice PDF bytes for the given order and user. Throws IllegalArgumentException
+     * if the order or user is missing.
+     */
+    public byte[] generateInvoicePdf(OrderEntity order, UserEntity user) {
+        if (order == null || user == null) {
+            throw new IllegalArgumentException("Order and user must be provided for invoice generation");
+        }
+        return createInvoicePdf(order, user);
+    }
+
+    public byte[] generateInvoicePdf(OrderEntity order) {
+        UserEntity user = resolveUser(order);
+        return createInvoicePdf(order, user);
     }
 
     private byte[] createInvoicePdf(OrderEntity order, UserEntity user) {
@@ -184,6 +195,21 @@ public class InvoiceService {
             return "-";
         }
         return amount.setScale(2, RoundingMode.HALF_UP).toPlainString() + " TRY";
+    }
+
+    private UserEntity resolveUser(OrderEntity order) {
+        if (order == null || order.getUserId() == null) {
+            throw new IllegalArgumentException("Order or order.userId is null");
+        }
+        return userRepository.findById(order.getUserId())
+                .orElseThrow(() -> new IllegalStateException("User not found for invoice generation"));
+    }
+
+    private UserEntity resolveUserOrNull(OrderEntity order) {
+        if (order == null || order.getUserId() == null) {
+            return null;
+        }
+        return userRepository.findById(order.getUserId()).orElse(null);
     }
 }
 

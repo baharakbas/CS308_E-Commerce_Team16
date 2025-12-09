@@ -100,11 +100,10 @@ class InvoiceServiceTest {
     }
 
     @Test
-    void throwsWhenUserMissing() {
+    void skipsEmailWhenUserMissing() {
         when(userRepository.findById("user-1")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> invoiceService.generateAndSendInvoice(order))
-                .isInstanceOf(IllegalStateException.class);
+        invoiceService.generateAndSendInvoice(order);
 
         verify(emailService, never()).sendInvoiceEmail(any(), any(), any(), any(), any());
     }
