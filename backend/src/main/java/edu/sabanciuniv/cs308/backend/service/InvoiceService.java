@@ -1,5 +1,6 @@
 package edu.sabanciuniv.cs308.backend.service;
 
+import edu.sabanciuniv.cs308.backend.dto.InvoiceDTO;
 import edu.sabanciuniv.cs308.backend.entity.AddressSnapshot;
 import edu.sabanciuniv.cs308.backend.entity.Money;
 import edu.sabanciuniv.cs308.backend.entity.OrderEntity;
@@ -78,6 +79,35 @@ public class InvoiceService {
     public byte[] generateInvoicePdf(OrderEntity order) {
         UserEntity user = resolveUser(order);
         return createInvoicePdf(order, user);
+    }
+
+    public byte[] buildInvoiceFromOrder(String orderId, UserEntity user, OrderEntity order) {
+        if (order == null) {
+            throw new IllegalArgumentException("order must not be null");
+        }
+        UserEntity resolvedUser = user != null ? user : resolveUserOrNull(order);
+        if (resolvedUser == null) {
+            throw new IllegalStateException("User not found for invoice generation");
+        }
+        log.debug("Building invoice PDF for order {}", orderId != null ? orderId : order.getId());
+        return createInvoicePdf(order, resolvedUser);
+    }
+
+    public void sendInvoiceEmail(InvoiceDTO invoiceDTO) {
+        if (invoiceDTO == null) {
+            return;
+        }
+        byte[] pdfBytes = invoiceDTO.getPdfBytes();
+        String recipient = invoiceDTO.getRecipientEmail();
+        if (pdfBytes == null || pdfBytes.length == 0 || recipient == null || recipient.isBlank()) {
+            log.warn("Invoice email skipped due to missing recipient or PDF.");
+            return;
+        }
+        String subject = Optional.ofNullable(invoiceDTO.getSubject()).orElse("Your TIDL invoice");
+        String body = Optional.ofNullable(invoiceDTO.getBody()).orElse("Invoice attached.");
+        String filename = Optional.ofNullable(invoiceDTO.getFilename()).orElse("invoice.pdf");
+
+        emailService.sendInvoiceEmail(recipient, subject, body, pdfBytes, filename);
     }
 
     private byte[] createInvoicePdf(OrderEntity order, UserEntity user) {
