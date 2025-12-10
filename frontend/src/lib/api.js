@@ -150,7 +150,16 @@ function buildBasketParams(userId, cartId) {
  * usage from Cart.jsx:
  *   getBasket({ userId: user.id, cartId })
  */
-export function getBasket({ userId, cartId } = {}) {
+export function getBasket(arg) {
+  let userId;
+  let cartId;
+  if (typeof arg === "object" && arg !== null && !Array.isArray(arg)) {
+    userId = arg.userId;
+    cartId = arg.cartId;
+  } else {
+    userId = arg;
+    cartId = arguments.length > 1 ? arguments[1] : undefined;
+  }
   return api.get("/basket", {
     params: buildBasketParams(userId, cartId),
   });
@@ -204,35 +213,15 @@ export const createReview = (payload) =>
 
 
 // ===================================================
-//                MOCK CHECKOUT + PAYMENT
+//                CHECKOUT & INVOICE
 // ===================================================
 
-// Fake checkout endpoint
-export function checkout(cartId, shipping, billing, paymentMethodId = "new") {
-  console.warn("⚠️ MOCK checkout() called — no backend endpoint exists.");
-
-  // simulate an order ID (real backend should generate this)
-  const mockOrderId = `MOCK-${Date.now()}`;
-
-  return Promise.resolve({
-    data: {
-      orderId: mockOrderId,
-      status: "OK",
-    },
-  });
+export function checkout(payload) {
+  return api.post("/checkout", payload);
 }
 
-// Fake payment endpoint
-export function processPayment(orderId, paymentDetails) {
-  console.warn("⚠️ MOCK processPayment() called — no backend endpoint exists.");
-  console.log("💳 Payment payload:", { orderId, paymentDetails });
-
-  return Promise.resolve({
-    data: {
-      status: "PAID",
-      orderId,
-    },
-  });
+export function downloadInvoice(orderId) {
+  return api.get(`/orders/${orderId}/invoice`, { responseType: "blob" });
 }
 
 
