@@ -1,5 +1,6 @@
 package edu.sabanciuniv.cs308.backend.service;
 
+import edu.sabanciuniv.cs308.backend.dto.CheckoutPrefillDTO;
 import edu.sabanciuniv.cs308.backend.dto.OrderDetailDTO;
 import edu.sabanciuniv.cs308.backend.entity.AddressSnapshot;
 import edu.sabanciuniv.cs308.backend.entity.Money;
@@ -7,6 +8,7 @@ import edu.sabanciuniv.cs308.backend.entity.OrderEntity;
 import edu.sabanciuniv.cs308.backend.entity.OrderItem;
 import edu.sabanciuniv.cs308.backend.entity.ProductEntity;
 import edu.sabanciuniv.cs308.backend.entity.UserEntity;
+import edu.sabanciuniv.cs308.backend.entity.PaymentMethod;
 import edu.sabanciuniv.cs308.backend.enums.OrderStatus;
 import edu.sabanciuniv.cs308.backend.repository.OrderRepository;
 import edu.sabanciuniv.cs308.backend.repository.ProductRepository;
@@ -17,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class CheckoutService {
@@ -116,6 +120,33 @@ public class CheckoutService {
         return OrderMapper.toDetail(saved);
     }
 
+    public CheckoutPrefillDTO getCheckoutPrefill(String userEmail) {
+        UserEntity user = userRepository.findByEmailAddress(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        CheckoutPrefillDTO dto = new CheckoutPrefillDTO();
+        dto.setUserId(user.getId());
+        dto.setName(user.getName());
+        dto.setEmailAddress(user.getEmailAddress());
+        dto.setPhoneNumber(user.getPhoneNumber());
+
+        List<UserEntity.Address> addresses = user.getAddresses();
+        if (addresses != null) {
+            dto.setAddresses(addresses.stream()
+                    .map(this::mapAddress)
+                    .collect(Collectors.toList()));
+        }
+
+        List<PaymentMethod> paymentMethods = user.getPaymentMethods();
+        if (paymentMethods != null) {
+            dto.setPaymentMethods(paymentMethods.stream()
+                    .map(this::mapPaymentMethod)
+                    .collect(Collectors.toList()));
+        }
+
+        return dto;
+    }
+
     // --------------------------------------------------------
     // Helper metodlar
     // --------------------------------------------------------
@@ -191,5 +222,34 @@ public class CheckoutService {
             variant.setStock(currentStock - quantity);
             productRepository.save(product);
         });
+    }
+
+    private CheckoutPrefillDTO.AddressDTO mapAddress(UserEntity.Address address) {
+        CheckoutPrefillDTO.AddressDTO dto = new CheckoutPrefillDTO.AddressDTO();
+        dto.setId(address.getId());
+        dto.setLabel(address.getLabel());
+        dto.setFullName(address.getFullName());
+        dto.setLine1(address.getLine1());
+        dto.setLine2(address.getLine2());
+        dto.setCity(address.getCity());
+        dto.setState(address.getState());
+        dto.setCountry(address.getCountry());
+        dto.setZipCode(address.getZipCode());
+        dto.setDefault(address.isDefault());
+        dto.setPhoneNumber(address.getPhoneNumber());
+        return dto;
+    }
+
+    private CheckoutPrefillDTO.PaymentMethodDTO mapPaymentMethod(PaymentMethod paymentMethod) {
+        CheckoutPrefillDTO.PaymentMethodDTO dto = new CheckoutPrefillDTO.PaymentMethodDTO();
+        dto.setId(paymentMethod.getId());
+        dto.setBrand(paymentMethod.getBrand());
+        dto.setLast4(paymentMethod.getLast4());
+        dto.setExpMonth(paymentMethod.getExpMonth());
+        dto.setExpYear(paymentMethod.getExpYear());
+        dto.setHolderName(paymentMethod.getHolderName());
+        dto.setDefault(paymentMethod.isDefault());
+        dto.setNickname(paymentMethod.getNickname());
+        return dto;
     }
 }

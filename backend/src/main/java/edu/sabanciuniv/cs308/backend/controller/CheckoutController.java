@@ -1,5 +1,6 @@
 package edu.sabanciuniv.cs308.backend.controller;
 
+import edu.sabanciuniv.cs308.backend.dto.CheckoutPrefillDTO;
 import edu.sabanciuniv.cs308.backend.dto.OrderDetailDTO;
 import edu.sabanciuniv.cs308.backend.request.CheckoutRequest;
 import edu.sabanciuniv.cs308.backend.service.CheckoutService;
@@ -30,6 +31,19 @@ public class CheckoutController {
         try {
             String email = auth.getName();
             OrderDetailDTO dto = checkoutService.checkout(email, req);
+            return ResponseEntity.ok(dto);
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    @GetMapping("/prefill")
+    public ResponseEntity<?> prefill(Authentication auth) {
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        try {
+            CheckoutPrefillDTO dto = checkoutService.getCheckoutPrefill(auth.getName());
             return ResponseEntity.ok(dto);
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));

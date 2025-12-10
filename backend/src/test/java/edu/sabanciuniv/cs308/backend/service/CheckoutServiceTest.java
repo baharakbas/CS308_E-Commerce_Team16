@@ -6,9 +6,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import edu.sabanciuniv.cs308.backend.dto.CheckoutPrefillDTO;
 import edu.sabanciuniv.cs308.backend.dto.OrderDetailDTO;
 import edu.sabanciuniv.cs308.backend.entity.OrderEntity;
 import edu.sabanciuniv.cs308.backend.entity.OrderItem;
+import edu.sabanciuniv.cs308.backend.entity.PaymentMethod;
 import edu.sabanciuniv.cs308.backend.entity.ProductEntity;
 import edu.sabanciuniv.cs308.backend.entity.UserEntity;
 import edu.sabanciuniv.cs308.backend.enums.OrderStatus;
@@ -101,6 +103,43 @@ class CheckoutServiceTest {
 
         assertThat(result).isNotNull();
         verify(invoiceService, times(1)).generateAndSendInvoice(any(OrderEntity.class));
+    }
+
+    @Test
+    void getCheckoutPrefillReturnsSavedData() {
+        UserEntity.Address address = new UserEntity.Address();
+        address.setId("addr-1");
+        address.setLabel("Home");
+        address.setFullName("Test User");
+        address.setLine1("Line 1");
+        address.setCity("City");
+        address.setState("State");
+        address.setCountry("Country");
+        address.setZipCode("12345");
+        address.setDefault(true);
+        address.setPhoneNumber("5551234");
+        user.getAddresses().add(address);
+
+        PaymentMethod paymentMethod = new PaymentMethod();
+        paymentMethod.setId("pm-1");
+        paymentMethod.setBrand("VISA");
+        paymentMethod.setLast4("1234");
+        paymentMethod.setExpMonth(12);
+        paymentMethod.setExpYear(2030);
+        paymentMethod.setHolderName("Test User");
+        paymentMethod.setDefault(true);
+        paymentMethod.setNickname("Primary");
+        user.getPaymentMethods().add(paymentMethod);
+
+        when(userRepository.findByEmailAddress("user@example.com")).thenReturn(Optional.of(user));
+
+        CheckoutPrefillDTO dto = checkoutService.getCheckoutPrefill("user@example.com");
+
+        assertThat(dto.getUserId()).isEqualTo("user-1");
+        assertThat(dto.getAddresses()).hasSize(1);
+        assertThat(dto.getPaymentMethods()).hasSize(1);
+        assertThat(dto.getAddresses().get(0).getLabel()).isEqualTo("Home");
+        assertThat(dto.getPaymentMethods().get(0).getLast4()).isEqualTo("1234");
     }
 }
 
